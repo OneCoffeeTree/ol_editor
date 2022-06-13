@@ -1,4 +1,4 @@
-import logo from './logo.svg';
+
 import './App.css';
 import Container from './map/Container.js';
 

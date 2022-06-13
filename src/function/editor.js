@@ -34,8 +34,8 @@ const editors = {
 		const rotate = new RotateFeatureInteraction({
 			features: features,
 			anchor: centroidPoint.geometry.coordinates,
-			angle: -90 * Math.PI / 180,
-			style
+			angle: -90 * Math.PI / 180,	// 디그리값에서 라디안 값으로 변경하기 위해 pi/180 를 곱함	// 기존 상태가 90도 위치인것으로 추정
+			style,
 		});
 		map.addInteraction(rotate);
 	},
@@ -44,13 +44,15 @@ const editors = {
 		const geom = feature.getGeometry();
 
 		if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+			// console.log(geom.getCoordinates()); 	// 3차원 배열 나옴 (각 LineString , LineString의 각 snap , 각 snap의 x-y 순서쌍)
 			let newGeom = new Array();
-			for (let i = 0; i < geom.getCoordinates().length; i++) {
-				newGeom.push([geom.getCoordinates()[i][0], geom.getCoordinates()[i][geom.getCoordinates()[i].length - 1]]);
+			for (let i = 0; i < geom.getCoordinates().length; i++) { // MultiLineString 이라서 geom.getCoordinates().length; 시 LineString 의 개수가 나옴
+				newGeom.push([geom.getCoordinates()[i][0], geom.getCoordinates()[i][geom.getCoordinates()[i].length - 1]]);	// i번째 선분의 시작점과 끝점을 가지고 선분을 다시만듬
 			}
 			geom.setCoordinates(newGeom);
-		} else {
-			const newGeom = [geom.getCoordinates()[0], geom.getCoordinates()[geom.getCoordinates().length - 1]];
+		} else { // singleLinestring 의 경우
+			// console.log(geom.getCoordinates()); // 2차원 배열 나옴 (각 snap, x-y순서쌍)
+			const newGeom = [geom.getCoordinates()[0], geom.getCoordinates()[geom.getCoordinates().length - 1]];	// 0번째와 마지막만 가지고 직선을 다시 만듬
 			geom.setCoordinates(newGeom);
 		}
 		feature.setGeometry(geom);
@@ -58,10 +60,11 @@ const editors = {
 	//라인 방향반전 => coordinate 변경
 	lineReverse: (feature) => {
 		const geom = feature.getGeometry();
-		if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+		console.log(geom);
+		if (feature.getGeometry().getType().indexOf('Multi') !== -1) {	// 바로 위의 직선화와 유사한 구조
 			let newGeom = new Array();
 			for (let i = 0; i < geom.getCoordinates().length; i++) {
-				newGeom.push(geom.getCoordinates()[i].reverse());
+				newGeom.push(geom.getCoordinates()[i].reverse()); // 배열이기 때문에 reverse() 함수로 배열의 순서를 뒤집어 snap들의 순서를 바꿈 
 			}
 			geom.setCoordinates(newGeom);
 		} else {
@@ -71,7 +74,7 @@ const editors = {
 
 		feature.setGeometry(geom);
 	},
-	//폴리곤, 라인 단순화 => turfjs 활용(simplify)
+	//폴리곤, 라인 단순화 => turfjs 활용(simplify)	// https://www.npmjs.com/package/@turf/simplify
 	simplify: (feature) => {
 		const featureGeom = {
 			type: feature.getGeometry().getType(),
