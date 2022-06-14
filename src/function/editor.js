@@ -465,7 +465,7 @@ const editors = {
 				} else {
 					alert('분할할 피쳐가 없습니다.');
 				}
-
+				
 				map.removeInteraction(this);
 				map.addInteraction(select);
 			})
