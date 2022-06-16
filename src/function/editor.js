@@ -371,9 +371,9 @@ const editors = {
 			}
 		}
 	},
-	//라인 노드별 분할
+	//라인 노드별 분할	// 수정함
 	lineNodeSplit: (feature, map) => {
-		if (feature.getGeometry().getType() === 'LineString') {
+		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
 			// 속성 키
 			let objKeys = Object.keys(feature.getProperties()).filter(item =>
 				item.indexOf('geom') === -1 && item.indexOf('ogc_fid') === -1 && item.indexOf('spatial_id') === -1);
@@ -381,52 +381,67 @@ const editors = {
 			let coords = null;
 
 			// 선택 피쳐 coordinates
-			if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-				coords = feature.getGeometry().getCoordinates()[0];
-			} else {
+			// if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+			// 	coords = feature.getGeometry().getCoordinates();
+			// } else {
 				coords = feature.getGeometry().getCoordinates();
-			}
-
+			// }
 			// coordinate가 2개 이상 (노드가 2개 이상이면)
-			if (coords.length > 2) {
+			let splitFlag = false;
+			if (feature.getGeometry().getType().indexOf('Multi') !== -1) {	// Multi 일때와 아닐때로 나누어서 실행 조건 걸기 splitFlag가 false이면 실행 안됨
+				if (coords[0].length > 2 || coords.length>=2){ splitFlag = true; }
+			} else {
+				if (coords.length > 2){ splitFlag = true; }
+			}
+			// console.log(splitFlag);
+			// debugger;
+			if (splitFlag) {
 				// 위의 for문에서 찾은 node list에 따라 line의 geometry를 변경 및 생성해주고, source와 target 값을 넣어줌
-				for (let i = 0; i < coords.length; i++) {
-					if (i === 0) {
-						const coord = coords.slice(i, i + 2);
-						const geom = feature.getGeometry();
-						if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-							geom.setCoordinates([coord]);
-						} else {
+				if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+					for(let i = 0; i < coords.length; i++){
+						console.log(coords[i]);
+						for (let j = 0; j < coords[i].length-1; j++) {
+							if (i === 0 && j === 0) {
+								const coord = coords[i].slice(j, j + 2);
+								console.log(coord);
+								const geom = feature.getGeometry();
+								geom.setCoordinates([coord]);
+								feature.setGeometry(geom);
+							} else {
+								const coord = coords[i].slice(j, j + 2);
+								let newFeature = null;
+								newFeature = new Feature(new MultiLineString([coord]));
+								map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+							}					
+						}
+					}
+				} else {
+					for (let i = 0; i < coords.length-1; i++) {
+						if (i === 0) {
+							const coord = coords.slice(i, i + 2);
+							const geom = feature.getGeometry();
 							geom.setCoordinates(coord);
-						}
-						feature.setGeometry(geom);
-					} else {
-						const coord = coords.slice(i, i + 2);
-						let newFeature = null;
-						if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-							newFeature = new Feature(new MultiLineString([coord]));
+							feature.setGeometry(geom);
 						} else {
+							const coord = coords.slice(i, i + 2);
+							let newFeature = null;
 							newFeature = new Feature(new LineString(coord));
-						}
-
-						// 새로 추가된 피쳐에 속성 정보 넣어주기
-						/*let obj = {};
-						newFeature.setProperties(obj);*/
-						if (coord.length > 1) {
+	
+							// 새로 추가된 피쳐에 속성 정보 넣어주기
+							/*let obj = {};
+							newFeature.setProperties(obj);*/
 							map.getLayers().getArray()[1].getSource().addFeature(newFeature);
-						}
-
+						}					
 					}
 				}
 			} else {
 				alert('분할피쳐 없음');
 			}
-		} else if (feature.getGeometry().getType() === 'MultiLineString') {
-
 		}
 	},
-	//라인 분할
+	//라인 분할 // 
 	lineSplit: (feature, map, select) => {
+		console.log("lineSplit");
 		if (feature.getGeometry().getType() === 'LineString') {
 			map.removeInteraction(select);
 
@@ -435,36 +450,50 @@ const editors = {
 				geometryName: 'geom',
 				type: 'LineString'
 			});
-
+			
 			drawEvent.on('drawend', function (e) {
 				const reader = new GeoJSONReader();
 				const writer = new GeoJSONWriter();
 				const geoJson = new GeoJSON();
 
 				const target = reader.read({ type: feature.getGeometry().getType(), coordinates: feature.getGeometry().getCoordinates() });
-				const splitLine = reader.read({ type: e.feature.getGeometry().getType(), coordinates: e.feature.getGeometry().getCoordinates() });
-
+				const splitLine = reader.read({ type: e.feature.getGeometry().getType(), coordinates: e.feature.getGeometry().getCoordinates() }); // 분할 클릭후 만든 선분?
+				console.log(target._points._coordinates);
 				const unionFunc = new UnionOp();
 				debugger;
-				const union = unionFunc.getClass().union(target, splitLine);
-				const polygonizer = new Polygonizer();
-				polygonizer.add(union);
-
-				const polygons = polygonizer.getPolygons();
-
-				if (polygons.array.length > 1) {
-					for (let i = 0; i < polygons.array.length; i++) {
-						if (i === 0) {
-							feature.setGeometry(geoJson.readGeometry(writer.write(polygons.array[i])));
-						} else {
-							const newFeature = new Feature(geoJson.readGeometry(writer.write(polygons.array[i])));
-							//feature.setProperties(feature.getProperties());
-							map.getLayers().getArray()[1].getSource().addFeature(newFeature);
-						}
-					}
-				} else {
-					alert('분할할 피쳐가 없습니다.');
+				const union = unionFunc.getClass().union(target, splitLine); // 교차점 마다 나누어줌 (target 과 splitLine간의 교차점 뿐만아니라 target, splitLine 자체의 교차점도 나누어줌)
+				
+				let array1 = [""];
+				union._geometries.forEach(ele=>{
+					array1.push(ele._points._coordinates);
+				})
+				while(array1[0][array1[0].length-1] !== target._points._coordinates[target._points._coordinates.length-1]){
+					array1.shift();
+					console.log(array1[0]);
 				}
+				
+				// union._geometries.forEach(ele=>{
+				// 	console.log(ele._points._coordinates);
+				// })
+
+				// const polygonizer = new Polygonizer();
+				// polygonizer.add(union);
+
+				// const polygons = polygonizer.getPolygons();
+
+				// if (polygons.array.length > 1) {
+				// 	for (let i = 0; i < polygons.array.length; i++) {
+				// 		if (i === 0) {
+				// 			feature.setGeometry(geoJson.readGeometry(writer.write(polygons.array[i])));
+				// 		} else {
+				// 			const newFeature = new Feature(geoJson.readGeometry(writer.write(polygons.array[i])));
+				// 			//feature.setProperties(feature.getProperties());
+				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+				// 		}
+				// 	}
+				// } else {
+				// 	alert('분할할 피쳐가 없습니다.');
+				// }
 				
 				map.removeInteraction(this);
 				map.addInteraction(select);
