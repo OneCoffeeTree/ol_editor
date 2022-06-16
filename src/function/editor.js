@@ -374,20 +374,11 @@ const editors = {
 	//라인 노드별 분할	// 수정함
 	lineNodeSplit: (feature, map) => {
 		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
-			// 속성 키
-			let objKeys = Object.keys(feature.getProperties()).filter(item =>
-				item.indexOf('geom') === -1 && item.indexOf('ogc_fid') === -1 && item.indexOf('spatial_id') === -1);
 			// coordinate
-			let coords = null;
+			let coords = feature.getGeometry().getCoordinates();
 
-			// 선택 피쳐 coordinates
-			// if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-			// 	coords = feature.getGeometry().getCoordinates();
-			// } else {
-				coords = feature.getGeometry().getCoordinates();
-			// }
-			// coordinate가 2개 이상 (노드가 2개 이상이면)
 			let splitFlag = false;
+
 			if (feature.getGeometry().getType().indexOf('Multi') !== -1) {	// Multi 일때와 아닐때로 나누어서 실행 조건 걸기 splitFlag가 false이면 실행 안됨
 				if (coords[0].length > 2 || coords.length>=2){ splitFlag = true; }
 			} else {
@@ -441,10 +432,8 @@ const editors = {
 	},
 	//라인 분할 // 수정 중
 	lineSplit: (feature, map, select) => {
-		// debugger;
 		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
 			map.removeInteraction(select);
-			console.log(map.getInteractions());
 
 			const drawEvent = new Draw({
 				//source: source,
@@ -454,9 +443,35 @@ const editors = {
 
 			drawEvent.on('drawend', function (e) {
 				// debugger;
-				console.log(map.getInteractions());
+				const reader = new GeoJSONReader();
 
+				const target = reader.read({ type: feature.getGeometry().getType(), coordinates: feature.getGeometry().getCoordinates() });
+				const splitLine = reader.read({ type: e.feature.getGeometry().getType(), coordinates: e.feature.getGeometry().getCoordinates() });
 
+				const unionFunc = new UnionOp();
+				// debugger;
+				const union = unionFunc.getClass().union(target, splitLine);
+				// console.log(union);
+				console.log(union._geometries);
+				const array=[];
+				union._geometries.forEach(line=>{
+					array.push(line._points._coordinates);
+					console.log(line._points._coordinates);
+				})
+				console.log(union._geometries[1]._points._coordinates[0]);
+				console.log(union._geometries[3]._points._coordinates[0]);
+				console.log(union._geometries[1]._points._coordinates[0] == union._geometries[3]._points._coordinates[0] ? "true" : "false");
+				
+				// console.log(union._geometries[union._geometries.length - 1]._points._coordinates[0]);
+				// while(array[0][0] !== array[array.length-1][0]){
+				// 	console.log(array[0]);
+					
+				// 	array.shift();
+				// }
+				console.log(array[1][0]);
+				console.log(array[3][0]);
+
+				console.log(array[1][0] == array[3][0] ? "true" : "false"); // 같은지 확인할 방법 찾기 
 				map.removeInteraction(this);
 				map.addInteraction(select);
 			})
@@ -465,10 +480,9 @@ const editors = {
 	},
 	//폴리곤 분할
 	polygonSplit: (feature, map, select) => {
-		debugger;
 		if (feature.getGeometry().getType() === 'Polygon') {
 			map.removeInteraction(select);
-			console.log(map.getInteractions());
+
 			const drawEvent = new Draw({
 				//source: source,
 				geometryName: 'geom',
@@ -476,8 +490,6 @@ const editors = {
 			});
 
 			drawEvent.on('drawend', function (e) {
-				debugger;
-				console.log(map.getInteractions());
 				const reader = new GeoJSONReader();
 				const writer = new GeoJSONWriter();
 				const geoJson = new GeoJSON();
@@ -492,22 +504,21 @@ const editors = {
 
 				const polygons = polygonizer.getPolygons();
 
-				// if (polygons.array.length > 1) {
-				// 	for (let i = 0; i < polygons.array.length; i++) {
-				// 		if (i === 0) {
-				// 			feature.setGeometry(geoJson.readGeometry(writer.write(polygons.array[i])));
-				// 		} else {
-				// 			const newFeature = new Feature(geoJson.readGeometry(writer.write(polygons.array[i])));
-				// 			//feature.setProperties(feature.getProperties());
-				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
-				// 		}
-				// 	}
-				// } else {
-				// 	alert('분할할 피쳐가 없습니다.');
-				// }
+				if (polygons.array.length > 1) {
+					for (let i = 0; i < polygons.array.length; i++) {
+						if (i === 0) {
+							feature.setGeometry(geoJson.readGeometry(writer.write(polygons.array[i])));
+						} else {
+							const newFeature = new Feature(geoJson.readGeometry(writer.write(polygons.array[i])));
+							//feature.setProperties(feature.getProperties());
+							map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+						}
+					}
+				} else {
+					alert('분할할 피쳐가 없습니다.');
+				}
 
 				map.removeInteraction(this);
-				console.log(map.getInteractions());
 				map.addInteraction(select);
 			})
 			map.addInteraction(drawEvent);
