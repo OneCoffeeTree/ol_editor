@@ -365,10 +365,10 @@ class Container extends React.Component { // App.js 에서 렌더링 하는것�
 		}
 	}
 
-	handleFeatureSplit = (type, feature) => {
+	handleFeatureSplit = (type, feature) => { // 수정중
 		this.handleClosePopup();
 		if (type.indexOf('LineString') !== -1) {
-			editors.lineSplit(feature, this.state.map);
+			editors.lineSplit(feature, this.state.map, this.state.select);
 		} else if (type.indexOf('Polygon') !== -1) {
 			editors.polygonSplit(feature, this.state.map, this.state.select);
 		}
