@@ -9,6 +9,7 @@
     "@testing-library/user-event": "^12.1.10",
     "@turf/turf": "^6.5.0",
     "jsts": "^2.7.3",
+    "lodash": "^4.17.21",
     "ol": "^6.9.0",
     "ol-rotate-feature": "^3.0.1",
     "react": "^17.0.2",

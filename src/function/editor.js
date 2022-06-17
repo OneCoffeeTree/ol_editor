@@ -17,6 +17,8 @@ import DistanceOp from 'jsts/org/locationtech/jts/operation/distance/DistanceOp'
 import UnionOp from 'jsts/org/locationtech/jts/operation/union/UnionOp';
 import Polygonizer from 'jsts/org/locationtech/jts/operation/polygonize/Polygonizer';
 import { LineMerger } from 'jsts/org/locationtech/jts/operation/linemerge';
+import _ from 'lodash';
+import { optionsFromCapabilities } from 'ol/source/WMTS';
 
 const editors = {
 	// 피쳐 이동 => ol interaction 활용(Translate)
@@ -410,6 +412,7 @@ const editors = {
 					for (let i = 0; i < coords.length-1; i++) {
 						if (i === 0) {
 							const coord = coords.slice(i, i + 2);
+							console.log(coord);
 							const geom = feature.getGeometry();
 							geom.setCoordinates(coord);
 							feature.setGeometry(geom);
@@ -430,7 +433,7 @@ const editors = {
 			}
 		}
 	},
-	//라인 분할 // 수정 중
+	//라인 분할 // 수정함
 	lineSplit: (feature, map, select) => {
 		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
 			map.removeInteraction(select);
@@ -447,31 +450,88 @@ const editors = {
 
 				const target = reader.read({ type: feature.getGeometry().getType(), coordinates: feature.getGeometry().getCoordinates() });
 				const splitLine = reader.read({ type: e.feature.getGeometry().getType(), coordinates: e.feature.getGeometry().getCoordinates() });
-
 				const unionFunc = new UnionOp();
 				// debugger;
-				const union = unionFunc.getClass().union(target, splitLine);
-				// console.log(union);
-				console.log(union._geometries);
-				const array=[];
+				const union = unionFunc.getClass().union(target, splitLine); // 모든 교차점을 기준으로 line을 나누어줌 , target과 splitLine 모두 나누어서 return해줌
+
+				const coordArray=[];	// union 에서 coordintes만 coordArray에 넣어줌 (...으로 해결 가능할수 있으니 나중에 코드 확인하기)
 				union._geometries.forEach(line=>{
-					array.push(line._points._coordinates);
+					coordArray.push(line._points._coordinates);
 					console.log(line._points._coordinates);
 				})
-				console.log(union._geometries[1]._points._coordinates[0]);
-				console.log(union._geometries[3]._points._coordinates[0]);
-				console.log(union._geometries[1]._points._coordinates[0] == union._geometries[3]._points._coordinates[0] ? "true" : "false");
 				
-				// console.log(union._geometries[union._geometries.length - 1]._points._coordinates[0]);
-				// while(array[0][0] !== array[array.length-1][0]){
-				// 	console.log(array[0]);
-					
-				// 	array.shift();
-				// }
-				console.log(array[1][0]);
-				console.log(array[3][0]);
+				let lastPoint = null;	// coordArray에서 target만 얻기위해 target의 마지막 점을 가져옴
+				if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+					lastPoint = target._geometries[target._geometries.length-1]._points._coordinates[target._geometries[target._geometries.length-1]._points._coordinates.length-1];
+				}
+				else {
+					lastPoint = target._points._coordinates[target._points._coordinates.length-1];
+				}
 
-				console.log(array[1][0] == array[3][0] ? "true" : "false"); // 같은지 확인할 방법 찾기 
+				while(!(_.isEqual(coordArray[coordArray.length-1][1],lastPoint))){	// coordArray의 각 값중 마지막 값이 lastPoint와 같은지 확인하여 같을때 까지 coorArray의 가장 마지막을 pop()을 이용해 지워줌
+					console.log(coordArray[coordArray.length-1]);
+					coordArray.pop();
+				}
+				console.log(coordArray);
+
+				// coordArray를 각각의 선분으로 바꾸어줌
+				
+				const geom = feature.getGeometry();
+				for(let i = 0 ; i < coordArray.length ; i++){
+					const coord =[];
+					if (i === 0) {
+						coordArray[i].forEach(ele=>{
+							coord.push([ele.x,ele.y]);
+						})
+						feature.getGeometry().getType().indexOf('Multi') !== -1 ? geom.setCoordinates([coord]) : geom.setCoordinates(coord);
+						feature.setGeometry(geom);
+					} else {
+						coordArray[i].forEach(ele=>{
+							coord.push([ele.x,ele.y]);
+						})
+						let newFeature = null;
+						feature.getGeometry().getType().indexOf('Multi') !== -1 ? newFeature = new Feature(new MultiLineString([coord])) : newFeature = new Feature(new LineString(coord));
+						map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+					}
+					console.log(i)
+						console.log(coord);	
+				}
+				// if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+				// 	for(let i = 0 ; i < coordArray.length ; i++){
+				// 		if (i === 0) {
+				// 			coordArray[i].forEach(ele=>{
+				// 				coord.push([ele.x,ele.y]);
+				// 			})
+				// 			geom.setCoordinates([coord]);
+				// 			feature.setGeometry(geom);
+				// 		} else {
+				// 			coordArray[i].forEach(ele=>{
+				// 				coord.push([ele.x,ele.y]);
+				// 			})
+				// 			let newFeature = null;
+				// 			newFeature = new Feature(new MultiLineString([coord]));
+				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+				// 		}	
+				// 	}
+				// }
+				// else {
+				// 	for(let i = 0 ; i < coordArray.length ; i++){
+				// 		if (i === 0) {
+				// 			coordArray[i].forEach(ele=>{
+				// 				coord.push([ele.x,ele.y]);
+				// 			})
+				// 			geom.setCoordinates(coord);
+				// 			feature.setGeometry(geom);
+				// 		} else {
+				// 			coordArray[i].forEach(ele=>{
+				// 				coord.push([ele.x,ele.y]);
+				// 			})
+				// 			let newFeature = null;
+				// 			newFeature = new Feature(new LineString(coord));
+				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+				// 		}	
+				// 	}
+				// }
 				map.removeInteraction(this);
 				map.addInteraction(select);
 			})
