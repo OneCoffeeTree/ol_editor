@@ -220,7 +220,7 @@ const editors = {
 		}
 
 	},
-	//라인 병합	// ? 병합시 라인이 사라지는 버그 있음	// 수정필요	
+	//라인 병합	// 수정함 // 라인 사라지는 버그 -> 병합 불가로 빼냄
 	lineStringMerge: (features, map) => {
 		//LineString
 		if (features[0].getGeometry().getType() === 'LineString') {
@@ -328,7 +328,7 @@ const editors = {
 		}
 
 	},
-	//폴리곤 병합
+	//폴리곤 병합	// 싱글 폴리곤 병합으로 멀티 폴리곤 처럼 만들수 있는 버그 있음
 	polygonMerge: (features, map) => {
 		const reader = new GeoJSONReader();
 		const writer = new GeoJSONWriter();
@@ -435,7 +435,7 @@ const editors = {
 			}
 		}
 	},
-	//라인 분할 // 겹치는 라인이 있을경우 문제가 있음 (자기 자신위로 겹쳐지는 경우)
+	//라인 분할 // 겹치는 라인이 있을경우 문제가 있음 (자기 자신위로 겹쳐지는 경우) -> union을 사용시 라인이 하나로 겹치는경우 하나의 라인으로 인식함
 	lineSplit: (feature, map, select) => {
 		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
 			map.removeInteraction(select);
@@ -566,7 +566,7 @@ const editors = {
 
 		}
 	},
-	deleteFeature: (feature, map) => {
+	deleteFeature: (feature, map) => {	// 삭제	// 멀티 폴리곤 병합후 삭제시 버그 발생
 		map.getLayers().getArray()[1].getSource().removeFeature(feature);
 	}
 
