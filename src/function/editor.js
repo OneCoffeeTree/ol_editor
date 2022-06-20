@@ -19,6 +19,7 @@ import Polygonizer from 'jsts/org/locationtech/jts/operation/polygonize/Polygoni
 import { LineMerger } from 'jsts/org/locationtech/jts/operation/linemerge';
 import _ from 'lodash';
 import { optionsFromCapabilities } from 'ol/source/WMTS';
+import { useState } from 'react';
 
 const editors = {
 	// 피쳐 이동 => ol interaction 활용(Translate)
@@ -219,7 +220,7 @@ const editors = {
 		}
 
 	},
-	//라인 병합
+	//라인 병합	// ? 병합시 라인이 사라지는 버그 있음	// 수정필요	
 	lineStringMerge: (features, map) => {
 		//LineString
 		if (features[0].getGeometry().getType() === 'LineString') {
@@ -227,8 +228,9 @@ const editors = {
 			const geoJson = new GeoJSON();
 			const writer = new GeoJSONWriter();
 			const merge = new LineMerger();
-
-			// 병합할 수 있는지 Check
+			console.log(features);
+			let mergeFlag = true;	// 기본값 true로 하고 문제 생길경우 false로 바꿔 병합하는 코드 미실행되게함
+			// 병합할 수 있는지 Check	// 한점에 3개가 모이는지 확인후 3개 이상 모일경우 병합 안된다고 해야함
 			for (let i = 0; i < features.length; i++) {
 				let sNum = 0;
 				let eNum = 0;
@@ -238,23 +240,24 @@ const editors = {
 						const a = feature.getGeometry().getCoordinates();
 						const b = features[j].getGeometry().getCoordinates();
 						let sDuplicate = function (a, b) {
-							if (a[0][0] === b[0][0] && a[0][1] === b[0][1]) {
+							if (a[0][0] === b[0][0] && a[0][1] === b[0][1]) {	// 첫번째 점의 x좌표와 y좌표를 비교
 								return true;
 							}
-							if (a[0][0] === b[b.length - 1][0] && a[0][1] === b[b.length - 1][1]) {
-								return true;
-							}
-							return false;
-						}
-						let eDuplicate = function (a, b) {
-							if (a[a.length - 1][0] === b[0][0] && a[a.length - 1][1] === b[0][1]) {
-								return true;
-							}
-							if (a[a.length - 1][0] === b[b.length - 1][0] && a[a.length - 1][1] === b[b.length - 1][1]) {
+							if (a[0][0] === b[b.length - 1][0] && a[0][1] === b[b.length - 1][1]) {	// a의 첫번째 점과 b의 마지막 점간의 x,y 좌표 비교
 								return true;
 							}
 							return false;
 						}
+						let eDuplicate = function (a, b) {	// 끝점 비교, 위의 sDuplicate에서 끝점으로 바뀐것 뿐
+							if (a[a.length - 1][0] === b[0][0] && a[a.length - 1][1] === b[0][1]) {		// 끝점 - 시작점
+								return true;
+							}
+							if (a[a.length - 1][0] === b[b.length - 1][0] && a[a.length - 1][1] === b[b.length - 1][1]) {	// 끝점 - 끝점
+								return true;
+							}
+							return false;
+						}
+						
 						if (sDuplicate(a, b)) {
 							sNum += 1;
 						}
@@ -262,38 +265,42 @@ const editors = {
 							eNum += 1;
 						}
 					}
+					
+					
 				}
-				if (sNum === 0 && eNum === 0) {
-					alert('병합 할 수 없습니다.');
-					return;
-				} else {
-					break;
-				}
+				console.log(sNum, eNum);
+				
+				if(sNum >= 2 || eNum >= 2) mergeFlag = false;	// 시작점 혹은 끝점이 다른 선과 2개 이상 연결 되어 있을때
+				if(sNum === 0 && eNum === 0) mergeFlag = false;	// 시작점 혹은 끝점이 다른 선과 연결된 경우가 없을때
 			}
+			if(mergeFlag){
+				// geometry merge
+				for (let i = 0; i < features.length; i++) {
+					const geomObj = {
+						type: features[i].getGeometry().getType(),
+						coordinates: features[i].getGeometry().getCoordinates()
+					}
+					const geom = reader.read(geomObj);
+					merge.add(geom);
+					if (i !== 0) {
+						map.getLayers().getArray()[1].getSource().removeFeature(features[i]);
+					}
+				}
 
-			// geometry merge
-			for (let i = 0; i < features.length; i++) {
+				// create merge geometry
+				const newCoord = writer.write(merge.getMergedLineStrings().toArray()[0]).coordinates;
 				const geomObj = {
-					type: features[i].getGeometry().getType(),
-					coordinates: features[i].getGeometry().getCoordinates()
+					type: 'LineString',
+					coordinates: newCoord
 				}
-				const geom = reader.read(geomObj);
-				merge.add(geom);
-				if (i !== 0) {
-					map.getLayers().getArray()[1].getSource().removeFeature(features[i]);
-				}
-			}
 
-			// create merge geometry
-			const newCoord = writer.write(merge.getMergedLineStrings().toArray()[0]).coordinates;
-			const geomObj = {
-				type: 'LineString',
-				coordinates: newCoord
+				// setGeometry
+				const newGeom = geoJson.readGeometry(geomObj);
+				features[0].setGeometry(newGeom);
+			}else{
+				alert('연결되지 않은 라인이 있거나 한 노드에 여러 라인이 붙어 병합 할 수 없습니다.');
 			}
-
-			// setGeometry
-			const newGeom = geoJson.readGeometry(geomObj);
-			features[0].setGeometry(newGeom);
+			
 			// MultiLineString
 		} else if (features[0].getGeometry().getType() === 'MultiLineString') {
 
@@ -392,7 +399,6 @@ const editors = {
 				// 위의 for문에서 찾은 node list에 따라 line의 geometry를 변경 및 생성해주고, source와 target 값을 넣어줌
 				if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
 					for(let i = 0; i < coords.length; i++){
-						console.log(coords[i]);
 						for (let j = 0; j < coords[i].length-1; j++) {
 							if (i === 0 && j === 0) {
 								const coord = coords[i].slice(j, j + 2);
@@ -420,10 +426,6 @@ const editors = {
 							const coord = coords.slice(i, i + 2);
 							let newFeature = null;
 							newFeature = new Feature(new LineString(coord));
-	
-							// 새로 추가된 피쳐에 속성 정보 넣어주기
-							/*let obj = {};
-							newFeature.setProperties(obj);*/
 							map.getLayers().getArray()[1].getSource().addFeature(newFeature);
 						}					
 					}
@@ -433,7 +435,7 @@ const editors = {
 			}
 		}
 	},
-	//라인 분할 // 수정함
+	//라인 분할 // 겹치는 라인이 있을경우 문제가 있음 (자기 자신위로 겹쳐지는 경우)
 	lineSplit: (feature, map, select) => {
 		if (feature.getGeometry().getType().indexOf('LineString') !== -1) {
 			map.removeInteraction(select);
@@ -443,95 +445,68 @@ const editors = {
 				geometryName: 'geom',
 				type: 'LineString'
 			});
-
+			
 			drawEvent.on('drawend', function (e) {
 				// debugger;
 				const reader = new GeoJSONReader();
-
 				const target = reader.read({ type: feature.getGeometry().getType(), coordinates: feature.getGeometry().getCoordinates() });
 				const splitLine = reader.read({ type: e.feature.getGeometry().getType(), coordinates: e.feature.getGeometry().getCoordinates() });
 				const unionFunc = new UnionOp();
 				// debugger;
 				const union = unionFunc.getClass().union(target, splitLine); // 모든 교차점을 기준으로 line을 나누어줌 , target과 splitLine 모두 나누어서 return해줌
-
-				const coordArray=[];	// union 에서 coordintes만 coordArray에 넣어줌 (...으로 해결 가능할수 있으니 나중에 코드 확인하기)
-				union._geometries.forEach(line=>{
-					coordArray.push(line._points._coordinates);
-					console.log(line._points._coordinates);
-				})
-				
-				let lastPoint = null;	// coordArray에서 target만 얻기위해 target의 마지막 점을 가져옴
-				if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-					lastPoint = target._geometries[target._geometries.length-1]._points._coordinates[target._geometries[target._geometries.length-1]._points._coordinates.length-1];
-				}
-				else {
-					lastPoint = target._points._coordinates[target._points._coordinates.length-1];
-				}
-
-				while(!(_.isEqual(coordArray[coordArray.length-1][1],lastPoint))){	// coordArray의 각 값중 마지막 값이 lastPoint와 같은지 확인하여 같을때 까지 coorArray의 가장 마지막을 pop()을 이용해 지워줌
-					console.log(coordArray[coordArray.length-1]);
-					coordArray.pop();
-				}
-				console.log(coordArray);
-
-				// coordArray를 각각의 선분으로 바꾸어줌
-				
-				const geom = feature.getGeometry();
-				for(let i = 0 ; i < coordArray.length ; i++){
-					const coord =[];
-					if (i === 0) {
-						coordArray[i].forEach(ele=>{
-							coord.push([ele.x,ele.y]);
-						})
-						feature.getGeometry().getType().indexOf('Multi') !== -1 ? geom.setCoordinates([coord]) : geom.setCoordinates(coord);
-						feature.setGeometry(geom);
-					} else {
-						coordArray[i].forEach(ele=>{
-							coord.push([ele.x,ele.y]);
-						})
-						let newFeature = null;
-						feature.getGeometry().getType().indexOf('Multi') !== -1 ? newFeature = new Feature(new MultiLineString([coord])) : newFeature = new Feature(new LineString(coord));
-						map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+				console.log(union._geometries.length);
+				if(union._geometries.length > 2){
+					const coordArray=[];	// union 에서 coordintes만 coordArray에 넣어줌 (...으로 해결 가능할수 있으니 나중에 코드 확인하기)
+					union._geometries.forEach(line=>{
+						coordArray.push(line._points._coordinates);
+						console.log(line._points._coordinates);
+					})
+					
+					console.log(coordArray);
+					console.log(target);
+					// debugger;
+					let lastPoint = null;	// coordArray에서 target만 얻기위해 target의 마지막 점을 가져옴
+					if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
+						lastPoint = target._geometries[target._geometries.length-1]._points._coordinates[target._geometries[target._geometries.length-1]._points._coordinates.length-1];
 					}
-					console.log(i)
-						console.log(coord);	
+					else {
+						lastPoint = target._points._coordinates[target._points._coordinates.length-1];
+					}
+					console.log(coordArray);
+					console.log(lastPoint);
+					
+					while(!(_.isEqual(coordArray[coordArray.length-1][coordArray[coordArray.length-1].length-1],lastPoint))){	// coordArray의 각 값중 마지막 값이 lastPoint와 같은지 확인하여 같을때 까지 coorArray의 가장 마지막을 pop()을 이용해 지워줌
+						coordArray.pop();
+					}
+					console.log(coordArray);
+
+					// coordArray를 각각의 선분으로 바꾸어줌
+					
+					const geom = feature.getGeometry();
+					for(let i = 0 ; i < coordArray.length ; i++){
+						const coord =[];
+						if (i === 0) {
+							coordArray[i].forEach(ele=>{
+								coord.push([ele.x,ele.y]);
+							})
+							feature.getGeometry().getType().indexOf('Multi') !== -1 ? geom.setCoordinates([coord]) : geom.setCoordinates(coord);
+							feature.setGeometry(geom);
+						} else {
+							coordArray[i].forEach(ele=>{
+								coord.push([ele.x,ele.y]);
+							})
+							let newFeature = null;
+							feature.getGeometry().getType().indexOf('Multi') !== -1 ? newFeature = new Feature(new MultiLineString([coord])) : newFeature = new Feature(new LineString(coord));
+							map.getLayers().getArray()[1].getSource().addFeature(newFeature);
+						}
+						console.log(i)
+							console.log(coord);	
+					}
+				}else{
+					alert('분할피쳐 없음');
 				}
-				// if (feature.getGeometry().getType().indexOf('Multi') !== -1) {
-				// 	for(let i = 0 ; i < coordArray.length ; i++){
-				// 		if (i === 0) {
-				// 			coordArray[i].forEach(ele=>{
-				// 				coord.push([ele.x,ele.y]);
-				// 			})
-				// 			geom.setCoordinates([coord]);
-				// 			feature.setGeometry(geom);
-				// 		} else {
-				// 			coordArray[i].forEach(ele=>{
-				// 				coord.push([ele.x,ele.y]);
-				// 			})
-				// 			let newFeature = null;
-				// 			newFeature = new Feature(new MultiLineString([coord]));
-				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
-				// 		}	
-				// 	}
-				// }
-				// else {
-				// 	for(let i = 0 ; i < coordArray.length ; i++){
-				// 		if (i === 0) {
-				// 			coordArray[i].forEach(ele=>{
-				// 				coord.push([ele.x,ele.y]);
-				// 			})
-				// 			geom.setCoordinates(coord);
-				// 			feature.setGeometry(geom);
-				// 		} else {
-				// 			coordArray[i].forEach(ele=>{
-				// 				coord.push([ele.x,ele.y]);
-				// 			})
-				// 			let newFeature = null;
-				// 			newFeature = new Feature(new LineString(coord));
-				// 			map.getLayers().getArray()[1].getSource().addFeature(newFeature);
-				// 		}	
-				// 	}
-				// }
+				
+				
 				map.removeInteraction(this);
 				map.addInteraction(select);
 			})
